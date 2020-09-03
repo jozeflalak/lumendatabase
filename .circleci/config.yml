@@ -1,0 +1,91 @@
+version: 2.1
+orbs:
+  ruby: circleci/ruby@1.1.1
+
+jobs:
+  build:
+    parallelism: 3
+    docker:
+      # Use this image rather than the base because we need browsers for
+      # integration testing.
+      - image: circleci/ruby:2.5.5-node-browsers
+        environment:
+           OPENSSL_CONF: ~/tmp/openssl.cnf
+           BUNDLE_PATH: ~/vendor/bundle
+      - image: circleci/postgres:9.6
+        environment:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: lumen_test
+          POSTGRES_PASSWORD: postgres
+      - image: docker.elastic.co/elasticsearch/elasticsearch:5.6.16
+        environment:
+          - cluster.name: circleci-lumen
+          - xpack.security.enabled: false
+          - transport.host: localhost
+          - network.host: 127.0.0.1
+          - http.port: 9250
+          - discovery.type: single-node
+    environment:
+      PGHOST: 127.0.0.1
+      RAILS_ENV: test
+      CIRCLECI: true
+    executor: ruby/default
+    steps:
+      # Build app.
+      - checkout
+      # Pull phantomjs from cache, or install. Note that this *will not work*
+      # when used for the first time with a given config; you need to comment it
+      # out after config changes, then uncomment for subsequent runs to use the
+      # cache.
+      # Note that:
+      #  - it looks for openssl.cnf in the wrong place; we override that with
+      #    environment above, and an empty openssl.cnf is fine
+      #  - it can't cache /usr/local/bin, so we store it locally and symlink
+      # - restore_cache:
+      #   keys: phantomjs-2-1-1
+      - run:
+          name: Install PhantomJS Dependencies
+          command: |
+            [ -f /usr/local/bin/phantomjs ] || sudo apt-get update
+            [ -f /usr/local/bin/phantomjs ] || sudo apt-get install -y fontconfig wget libssl-dev
+      - run:
+          name: Install PhantomJS
+          command: |
+            [ -f /usr/local/bin/phantomjs ] || wget -O /tmp/phantomjs.tar.bz2 https://bitbucket.org/ariya/phantomjs/downloads/phantomjs-2.1.1-linux-x86_64.tar.bz2
+            [ -f /usr/local/bin/phantomjs ] || tar -xjf /tmp/phantomjs.tar.bz2 -C /tmp
+            [ -f /usr/local/bin/phantomjs ] || sudo ln -sf /tmp/phantomjs-2.1.1-linux-x86_64/bin/phantomjs /usr/local/bin/phantomjs
+            sudo chmod ugo+x /usr/local/bin/phantomjs
+            mkdir ~/tmp
+            touch ~/tmp/openssl.cnf
+      - save_cache:
+          key: phantomjs-2-1-1
+          paths:
+            - /tmp/phantomjs-2.1.1-linux-x86_64/bin/phantomjs
+      # Install bundler dependencies.
+      # We use handwritten commands rather than ruby/install-deps because:
+      #  - install-deps doesn't capture the rails_admin_tag_list, which is
+      #    built from a github commit rather than from rubygems.
+      #  - this lets us cache.
+      - restore_cache:
+          keys:
+            - gem-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "Gemfile.lock" }}
+      - run:
+          name: Install dependencies
+          command: |
+            gem install bundler
+            bundle install
+      - save_cache:
+          key: gem-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "Gemfile.lock" }}
+          paths:
+            - ~/vendor/bundle
+      - run:
+          name: Wait for DB
+          command: dockerize -wait tcp://localhost:5432 -timeout 1m
+      - run:
+          name: Database setup
+          command: |
+            cp config/database.yml.circle config/database.yml
+            bundle exec rails db:schema:load RAILS_ENV=test
+      - run: mkdir -p tmp/cache
+      # Finally: Run tests! Use native command for ease of parallelization.
+      - ruby/rspec-test
