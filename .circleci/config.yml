@@ -72,7 +72,6 @@ jobs:
       - run:
           command: |
             gem install bundler
-            bundle clean --force
       - restore_cache:
           keys:
             - gem-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "Gemfile.lock" }}
