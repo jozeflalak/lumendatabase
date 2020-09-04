@@ -42,8 +42,8 @@ jobs:
       #  - it looks for openssl.cnf in the wrong place; we override that with
       #    environment above, and an empty openssl.cnf is fine
       #  - it can't cache /usr/local/bin, so we store it locally and symlink
-      - restore_cache:
-          keys: phantomjs-2-1-1
+      # - restore_cache:
+      #     keys: phantomjs-2-1-1
       - run:
           name: Install PhantomJS Dependencies
           command: |
