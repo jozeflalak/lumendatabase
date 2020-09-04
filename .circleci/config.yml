@@ -69,6 +69,7 @@ jobs:
       #  - install-deps doesn't capture the rails_admin_tag_list, which is
       #    built from a github commit rather than from rubygems.
       #  - this lets us cache.
+      - run: bundle clean --force
       - restore_cache:
           keys:
             - gem-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "Gemfile.lock" }}
@@ -81,6 +82,7 @@ jobs:
           key: gem-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "Gemfile.lock" }}
           paths:
             - vendor/bundle
+            - ~/.bundle
 
       # Prepare database.
       - run:
@@ -97,7 +99,7 @@ jobs:
       - restore_cache:
           keys:
             - v1-asset-cache-{{ arch }}-{{ .Branch }}
-      - run: rails lumen:set_up_cms
+      - run: bundle exec rails lumen:set_up_cms # Needed for precompilation.
       - run: bundle exec rake assets:precompile
       - save_cache:
           key: v1-asset-cache-{{ arch }}-{{ .Branch }}
