@@ -69,14 +69,16 @@ jobs:
       #  - install-deps doesn't capture the rails_admin_tag_list, which is
       #    built from a github commit rather than from rubygems.
       #  - this lets us cache.
-      - run: bundle clean --force
+      - run:
+          command: |
+            gem install bundler
+            bundle clean --force
       - restore_cache:
           keys:
             - gem-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "Gemfile.lock" }}
       - run:
           name: Install dependencies
           command: |
-            gem install bundler
             bundle check || bundle install
       - save_cache:
           key: gem-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "Gemfile.lock" }}
