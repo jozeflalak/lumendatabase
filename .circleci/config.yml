@@ -9,8 +9,6 @@ jobs:
       # Use this image rather than the base because we need browsers for
       # integration testing.
       - image: circleci/ruby:2.5.5-node-browsers
-        environment:
-           BUNDLE_PATH: ~/vendor/bundle
       - image: circleci/postgres:9.6
         environment:
           POSTGRES_USER: postgres
@@ -78,11 +76,11 @@ jobs:
           name: Install dependencies
           command: |
             gem install bundler
-            bundle install
+            bundle check || bundle install
       - save_cache:
           key: gem-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "Gemfile.lock" }}
           paths:
-            - ~/vendor/bundle
+            - vendor/bundle
 
       # Prepare database.
       - run:
@@ -96,9 +94,10 @@ jobs:
       - run: mkdir -p tmp/cache
 
       # Precompile assets to speed up tests.
-      # - restore_cache:
-      #     keys:
-      #       - v1-asset-cache-{{ arch }}-{{ .Branch }}
+      - restore_cache:
+          keys:
+            - v1-asset-cache-{{ arch }}-{{ .Branch }}
+      - run: rails lumen:set_up_cms
       - run: bundle exec rake assets:precompile
       - save_cache:
           key: v1-asset-cache-{{ arch }}-{{ .Branch }}
