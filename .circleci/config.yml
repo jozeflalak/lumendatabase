@@ -28,11 +28,12 @@ jobs:
     environment:
       PGHOST: 127.0.0.1
       RAILS_ENV: test
-      CIRCLECI: true
+      # CIRCLECI: true (which we use in tests) is set by circleci itself.
     executor: ruby/default
     steps:
       # Build app.
       - checkout
+
       # Pull phantomjs from cache, or install. Note that this *will not work*
       # when used for the first time with a given config; you need to comment it
       # out after config changes, then uncomment for subsequent runs to use the
@@ -41,8 +42,8 @@ jobs:
       #  - it looks for openssl.cnf in the wrong place; we override that with
       #    environment above, and an empty openssl.cnf is fine
       #  - it can't cache /usr/local/bin, so we store it locally and symlink
-      # - restore_cache:
-      #   keys: phantomjs-2-1-1
+      - restore_cache:
+        keys: phantomjs-2-1-1
       - run:
           name: Install PhantomJS Dependencies
           command: |
@@ -61,6 +62,7 @@ jobs:
           key: phantomjs-2-1-1
           paths:
             - /tmp/phantomjs-2.1.1-linux-x86_64/bin/phantomjs
+
       # Install bundler dependencies.
       # We use handwritten commands rather than ruby/install-deps because:
       #  - install-deps doesn't capture the rails_admin_tag_list, which is
@@ -78,6 +80,8 @@ jobs:
           key: gem-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "Gemfile.lock" }}
           paths:
             - ~/vendor/bundle
+
+      # Prepare database.
       - run:
           name: Wait for DB
           command: dockerize -wait tcp://localhost:5432 -timeout 1m
@@ -87,5 +91,19 @@ jobs:
             cp config/database.yml.circle config/database.yml
             bundle exec rails db:schema:load RAILS_ENV=test
       - run: mkdir -p tmp/cache
+
+      # Precompile assets to speed up tests.
+      - restore_cache:
+          keys:
+            - v1-asset-cache-{{ arch }}-{{ .Branch }}
+      - run: bundle exec rake assets:precompile
+      - save_cache:
+          key: v1-asset-cache-{{ arch }}-{{ .Branch }}
+          paths:
+            - public/assets
+            - tmp/cache/assets/sprockets
+
+      # debugging -- can we find phantomjs?
+      - run: phantomjs --version
       # Finally: Run tests! Use native command for ease of parallelization.
       - ruby/rspec-test
